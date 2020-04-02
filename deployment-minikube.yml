@@ -1,0 +1,80 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: kubeware
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubeware
+      version: v0.1.0
+  template:
+    metadata:
+      labels:
+        app: kubeware
+        version: v0.1.0
+    spec:
+      volumes:
+        - name: kubeware
+          configMap:
+            name: kubeware
+            items:
+              - key: config.toml
+                path: config.toml
+      containers:
+        - name: httpbin
+          image: docker.io/kennethreitz/httpbin
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+        - name: kubeware
+          image: 'kubeware:0.1.0'
+          ports:
+            - containerPort: 81
+              protocol: TCP
+          env:
+            - name: RUST_LOG
+              value: DEBUG
+          volumeMounts:
+            - name: kubeware
+              mountPath: /opt/kubeware
+          imagePullPolicy: Never
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+
+---
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: kubeware
+data:
+  config.toml: |
+    ip = "0.0.0.0"
+    port = 81
+    [backend]
+    url = "http://127.0.0.1:80"
+    [[services]]
+    url = "http://127.0.0.1:17002"
+    pre_request = true
+    post_request = true
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: kubeware
+  namespace: default
+  labels:
+    app: kubeware
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8001
+      targetPort: 81
+  selector:
+    app: kubeware
+  type: NodePort
