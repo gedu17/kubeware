@@ -1,0 +1,23 @@
+[package]
+name = "kubeware"
+version = "0.1.0"
+authors = ["gedu17"]
+edition = "2018"
+
+[dependencies]
+tonic = "0.1.1"
+hyper = "0.13"
+tokio = { version = "0.2", features = ["full"] }
+pretty_env_logger = "0.4"
+log = "0.4.8"
+bytes = "0.5.4"
+prost = "0.6.1"
+prost-derive = "0.6.1"
+prost-types = "0.6.1"
+toml = "0.5.6"
+serde = "1.0.105"
+serde_derive = "1.0.105"
+futures = "0.3.4"
+
+[build-dependencies]
+tonic-build = "0.1.0"

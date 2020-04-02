@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package kubeware;
+
+// Common
+message RequestHeader {
+    string name = 1;
+    string value = 2;
+}
+
+enum ResponseStatus {
+    SUCCESS = 0;
+    FAILURE_CONTINUE = 1;
+    STOP = 2;
+}
+
+message ResponseHeader {
+    string name = 1;
+    string value = 2;
+}
+
+// Pre request
+message PreRequest {
+    string method = 1;
+    string path = 2;
+    repeated RequestHeader headers = 3;
+    string body = 4;
+}
+
+message PreResponse {
+    ResponseStatus status = 1;
+    repeated ResponseHeader addedHeaders = 2;
+    repeated string removedHeaders = 3;
+    string body = 4;
+    uint32 statusCode = 5;
+}
+
+// Post request
+message PostRequest {
+    string method = 1;
+    string path = 2;
+    repeated RequestHeader requestHeaders = 3;
+    repeated RequestHeader responseHeaders = 4;
+    string requestBody = 5;
+    string responseBody = 6;
+}
+
+message PostResponse {
+    ResponseStatus status = 1;
+    repeated ResponseHeader addedHeaders = 2;
+    repeated string removedHeaders = 3;
+    string body = 4;
+    uint32 statusCode = 5;
+}
+
+service Proxy {
+    rpc HandlePreRequest(PreRequest) returns (PreResponse);
+    rpc HandlePostRequest(PostRequest) returns (PostResponse);
+}
