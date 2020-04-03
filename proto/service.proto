@@ -1,59 +1,55 @@
 syntax = "proto3";
+import "google/protobuf/wrappers.proto";
 
 package kubeware;
 
 // Common
-message RequestHeader {
+message Header {
     string name = 1;
     string value = 2;
 }
 
 enum ResponseStatus {
     SUCCESS = 0;
-    FAILURE_CONTINUE = 1;
+    CONTINUE = 1;
     STOP = 2;
 }
 
-message ResponseHeader {
-    string name = 1;
-    string value = 2;
-}
-
-// Pre request
-message PreRequest {
+// Request
+message RequestRequest {
     string method = 1;
-    string path = 2;
-    repeated RequestHeader headers = 3;
+    string uri = 2;
+    repeated Header headers = 3;
     string body = 4;
 }
 
-message PreResponse {
+message RequestResponse {
     ResponseStatus status = 1;
-    repeated ResponseHeader addedHeaders = 2;
+    repeated Header addedHeaders = 2;
     repeated string removedHeaders = 3;
-    string body = 4;
-    uint32 statusCode = 5;
+    google.protobuf.StringValue body = 4;
+    google.protobuf.UInt32Value statusCode = 5;
 }
 
-// Post request
-message PostRequest {
+// Response
+message ResponseRequest {
     string method = 1;
-    string path = 2;
-    repeated RequestHeader requestHeaders = 3;
-    repeated RequestHeader responseHeaders = 4;
+    string uri = 2;
+    repeated Header requestHeaders = 3;
+    repeated Header responseHeaders = 4;
     string requestBody = 5;
     string responseBody = 6;
 }
 
-message PostResponse {
+message ResponseResponse {
     ResponseStatus status = 1;
-    repeated ResponseHeader addedHeaders = 2;
+    repeated Header addedHeaders = 2;
     repeated string removedHeaders = 3;
-    string body = 4;
-    uint32 statusCode = 5;
+    google.protobuf.StringValue body = 4;
+    google.protobuf.UInt32Value statusCode = 5;
 }
 
-service Proxy {
-    rpc HandlePreRequest(PreRequest) returns (PreResponse);
-    rpc HandlePostRequest(PostRequest) returns (PostResponse);
+service Middleware {
+    rpc HandleRequest(RequestRequest) returns (RequestResponse);
+    rpc HandleResponse(ResponseRequest) returns (ResponseResponse);
 }
