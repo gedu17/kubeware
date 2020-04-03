@@ -99,10 +99,6 @@ impl RequestContainer {
 
     pub fn response_headers_set(&mut self, headers: HeaderMap) { self.response.headers = headers }
 
-    pub fn response_body_set_bytes(&mut self, body: Bytes) { self.response.body = body }
-
-    pub fn response_body_set_string(&mut self, body: String) { self.response.body = Bytes::from(body) }
-
     pub fn status_code_set(&mut self, status_code: u16) { self.status_code = Some(status_code) }
 
     pub fn add_headers(&mut self, headers:&Vec<Header>) -> Result<()> {
@@ -119,7 +115,19 @@ impl RequestContainer {
         Ok(())
     }
 
-    pub fn request_body_set_string(&mut self, body: String) { self.request.body = Bytes::from(body) }
+    pub fn body_set_string(&mut self, body: String) {
+        match self.state {
+            MiddlewareRequest => self.request.body = Bytes::from(body),
+            _ => self.response.body = Bytes::from(body)
+        }
+    }
+
+    pub fn body_set_bytes(&mut self, body: Bytes) {
+        match self.state {
+            MiddlewareRequest => self.request.body = body,
+            _ => self.response.body = body
+        }
+    }
 
     pub fn remove_headers(&mut self, headers: &Vec<String>) {
         let mut container = match self.state {
@@ -139,15 +147,10 @@ impl RequestContainer {
     pub fn uri (&self) -> String { self.uri.to_string() }
 
     pub fn headers (&self) -> Vec<Header> {
-        let container = match self.state {
-            MiddlewareRequest => &self.request.headers,
-            _ => &self.response.headers
-        };
-
-        container.iter().map(|x| Header {
-            name: x.0.to_string(),
-            value: x.1.to_str().unwrap().to_string()
-        }).collect::<Vec<Header>>()
+        match self.state {
+            MiddlewareRequest => self.request_headers(),
+            _ => self.response_headers()
+        }
     }
 
     pub fn request_headers (&self) -> Vec<Header> {
@@ -169,5 +172,12 @@ impl RequestContainer {
     pub fn response_body (&self) -> Result<String> { Ok(std::str::from_utf8(self.response.body.as_ref())?.to_string()) }
 
     pub fn status_code (&self) -> Option<u16> { self.status_code }
+
+    pub fn body (&self) -> Result<String> {
+        match self.state {
+            MiddlewareRequest => self.request_body(),
+            _ => self.response_body()
+        }
+    }
 
 }

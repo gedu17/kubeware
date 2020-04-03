@@ -70,8 +70,6 @@ impl RequestHandler {
                                 },
                                 None => ()
                             };
-
-                            ()
                         },
                         Err(err) => {
                             error!("[Middleware Request] Failed to get response from {}: {:?}", client.url(), err);
@@ -79,13 +77,9 @@ impl RequestHandler {
                             return Ok(RequestHandler::service_unavailable_error())
                         }
                     };
-
-                    ()
                 },
                 None => {
                     warn!("[Middleware Request] Endpoint is not resolved and will be ignored. {}", client.url());
-
-                    ()
                 }
             };
 
@@ -100,8 +94,6 @@ impl RequestHandler {
             Ok(data) => {
                 container.backend_elapsed_set(backend_timer.elapsed());
                 container.handle_response(data).await?;
-
-                ()
             },
             Err(err) => {
                 error!("[Backend] Failed to get response from backend. {}", err);
@@ -133,26 +125,20 @@ impl RequestHandler {
                                 },
                                 None => ()
                             }
-
-                            ()
                         },
                         Err(err) => {
-                            error!("[Middleware Request] Failed to get response from {}: {:?}", client.url(), err);
+                            error!("[Middleware Response] Failed to get response from {}: {:?}", client.url(), err);
 
                             return Ok(RequestHandler::service_unavailable_error())
                         }
                     }
-
-                    ()
                 },
                 None => {
-                    warn!("[Middleware Request] Endpoint is not resolved and will be ignored. {}", client.url());
-
-                    ()
+                    warn!("[Middleware Response] Endpoint is not resolved and will be ignored. {}", client.url());
                 }
             };
 
-            info!("[Middleware Request] {} took {} ms", client.url(), timer.elapsed().as_millis());
+            info!("[Middleware Response] {} took {} ms", client.url(), timer.elapsed().as_millis());
         }
 
         Ok(container.into_response()?)

@@ -16,7 +16,7 @@ pub struct ContainerHandler {
     container: RequestContainer,
     url: String,
     backend_elapsed: Option<Duration>,
-    timer: Option<Instant>
+    timer: Instant
 }
 
 impl ContainerHandler {
@@ -38,7 +38,7 @@ impl ContainerHandler {
             container: request_container.build(),
             url,
             backend_elapsed: None,
-            timer: None
+            timer: Instant::now()
         })
     }
 
@@ -53,7 +53,7 @@ impl ContainerHandler {
         };
 
         match &response.body {
-            Some(val) => self.container.request_body_set_string(val.clone()),
+            Some(val) => self.container.body_set_string(val.clone()),
             None => ()
         };
 
@@ -72,7 +72,7 @@ impl ContainerHandler {
         };
 
         match &response.body {
-            Some(val) => self.container.response_body_set_string(val.clone()),
+            Some(val) => self.container.body_set_string(val.clone()),
             None => ()
         };
 
@@ -84,7 +84,7 @@ impl ContainerHandler {
 
         self.container.response_headers_set(metadata.headers.to_owned());
         self.container.status_code_set(metadata.status.as_u16());
-        self.container.response_body_set_bytes(hyper::body::to_bytes(body).await?);
+        self.container.body_set_bytes(hyper::body::to_bytes(body).await?);
 
         Ok(())
     }
@@ -122,7 +122,6 @@ impl ContainerHandler {
         }
 
         let body = self.container.request_body()?;
-
         headers_dict.insert(CONTENT_LENGTH, body.len().into());
 
         Ok(request_builder.body(body.into())?)
@@ -132,7 +131,7 @@ impl ContainerHandler {
         let mut response = Response::builder()
             .version(self.container.version())
             .status(self.container.status_code().unwrap_or(500))
-            .header(KUBEWARE_TIME_HEADER, HeaderValue::from_str(&self.timer.unwrap().elapsed().as_millis().to_string())?)
+            .header(KUBEWARE_TIME_HEADER, HeaderValue::from_str(&self.timer.elapsed().as_millis().to_string())?)
             .header(BACKEND_TIME_HEADER, HeaderValue::from_str(&self.backend_elapsed.unwrap().as_millis().to_string())?);
 
         let headers_dict = response.headers_mut().unwrap();
@@ -146,11 +145,10 @@ impl ContainerHandler {
             headers_dict.insert(HeaderName::from_lowercase(header.name.to_lowercase().as_bytes())?, HeaderValue::from_str(header.value.as_str())?);
         }
 
-        let body = self.container.request_body()?;
-
+        let body = self.container.body()?;
         headers_dict.insert(CONTENT_LENGTH, body.len().into());
 
-        info!("[{}] {} - {} | {} ms.", self.container.method(), self.container.uri(), self.container.status_code().unwrap_or(500), self.timer.unwrap().elapsed().as_millis());
+        info!("[{}] {} - {} | {} ms.", self.container.method(), self.container.uri(), self.container.status_code().unwrap_or(500), self.timer.elapsed().as_millis());
 
         Ok(response.body(body.into())?)
     }
