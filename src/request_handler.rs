@@ -2,14 +2,15 @@ use std::sync::{Arc};
 use crate::services::Services;
 use hyper::{Client, Request, Body, Response};
 use hyper::client::HttpConnector;
-use crate::config::Config;
-use crate::request_container::RequestContainer;
+use crate::config::{Config};
 use std::time::{Instant};
 use hyper::service::Service;
 use std::pin::Pin;
 use std::future::Future;
 use std::task::{Context, Poll};
 use crate::kubeware::{ResponseStatus};
+use crate::container_handler::ContainerHandler;
+use crate::request_container::ContainerState::{MiddlewareResponse, Response as BackendResponse};
 
 type GenericError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -44,27 +45,28 @@ impl RequestHandler {
     }
 
     async fn handle(req: Request<Body>, services: Arc<Services>, config: Config, http_client: Client<HttpConnector>) -> Result<Response<Body>, GenericError> {
-        let uri = [config.backend.url.as_str(), req.uri().path()].join("");
-        let mut container = RequestContainer::from_request(req).await?;
+        let url = [config.backend.url.as_str(), req.uri().path()].join("");
+        let mut container = ContainerHandler::new(req, url).await?;
         let services = services.to_owned();
 
-        for client in services.pre_request() {
-            let pre_request_timer = Instant::now();
+        for client in services.request() {
+            let timer = Instant::now();
+
             match client.connection().clone() {
                 Some(mut connection) => {
-                    let request = tonic::Request::new(container.generate_pre_request()?);
+                    let request = tonic::Request::new(container.into_middleware_request()?);
 
-                    match connection.handle_pre_request(request).await {
+                    match connection.handle_request(request).await {
                         Ok(response) => {
                             let data = response.into_inner();
 
                             match ResponseStatus::from_i32(data.status) {
-                                Some(ResponseStatus::Success) => container.parse_pre_request(&data)?,
-                                Some(ResponseStatus::FailureContinue) => (),
+                                Some(ResponseStatus::Success) => container.handle_middleware_request(&data)?,
+                                Some(ResponseStatus::Continue) => (),
                                 Some(ResponseStatus::Stop) => {
-                                    container.parse_pre_request(&data)?;
+                                    container.handle_middleware_request(&data)?;
 
-                                    return Ok(container.response_from_pre_request()?)
+                                    return Ok(container.into_response()?)
                                 },
                                 None => ()
                             };
@@ -72,7 +74,7 @@ impl RequestHandler {
                             ()
                         },
                         Err(err) => {
-                            error!("[Pre Request] Failed to get response from {}: {:?}", client.url(), err);
+                            error!("[Middleware Request] Failed to get response from {}: {:?}", client.url(), err);
 
                             return Ok(RequestHandler::service_unavailable_error())
                         }
@@ -81,50 +83,53 @@ impl RequestHandler {
                     ()
                 },
                 None => {
-                    warn!("[Pre Request] Endpoint is not resolved and will be ignored. {}", client.url());
+                    warn!("[Middleware Request] Endpoint is not resolved and will be ignored. {}", client.url());
 
                     ()
                 }
             };
 
-            info!("[Pre Request] {} took {} ms", client.url(), pre_request_timer.elapsed().as_millis());
+            info!("[Middleware Request] {} took {} ms", client.url(), timer.elapsed().as_millis());
         }
 
-        // Backend request
+        container.state_set(BackendResponse);
+
         let backend_timer = Instant::now();
 
-        match http_client.request(container.request_from_pre_request(uri)?).await {
+        match http_client.request(container.into_request()?).await {
             Ok(data) => {
-                container.backend_elapsed(backend_timer.elapsed());
-                container.parse_be_response(data).await?;
+                container.backend_elapsed_set(backend_timer.elapsed());
+                container.handle_response(data).await?;
 
                 ()
             },
             Err(err) => {
-                error!("[Upstream] Failed to get response from upstream. {}", err);
+                error!("[Backend] Failed to get response from backend. {}", err);
 
                 return Ok(RequestHandler::gateway_error())
             }
         }
 
-        for client in services.post_request() {
-            let post_request_timer = Instant::now();
+        container.state_set(MiddlewareResponse);
+
+        for client in services.response() {
+            let timer = Instant::now();
 
             match client.connection().clone() {
                 Some(mut connection) => {
-                    let request = tonic::Request::new(container.generate_post_request()?);
+                    let request = tonic::Request::new(container.into_middleware_response()?);
 
-                    match connection.handle_post_request(request).await {
+                    match connection.handle_response(request).await {
                         Ok(response) => {
                             let data = response.into_inner();
 
                             match ResponseStatus::from_i32(data.status) {
-                                Some(ResponseStatus::Success) => container.parse_post_request(&data)?,
-                                Some(ResponseStatus::FailureContinue) => (),
+                                Some(ResponseStatus::Success) => container.handle_middleware_response(&data)?,
+                                Some(ResponseStatus::Continue) => (),
                                 Some(ResponseStatus::Stop) => {
-                                    container.parse_post_request(&data)?;
+                                    container.handle_middleware_response(&data)?;
 
-                                    return Ok(container.response_from_post_request()?)
+                                    return Ok(container.into_response()?)
                                 },
                                 None => ()
                             }
@@ -132,7 +137,7 @@ impl RequestHandler {
                             ()
                         },
                         Err(err) => {
-                            error!("[Post Request] Failed to get response from {}: {:?}", client.url(), err);
+                            error!("[Middleware Request] Failed to get response from {}: {:?}", client.url(), err);
 
                             return Ok(RequestHandler::service_unavailable_error())
                         }
@@ -141,17 +146,16 @@ impl RequestHandler {
                     ()
                 },
                 None => {
-                    warn!("[Post Request] Endpoint is not resolved and will be ignored. {}", client.url());
+                    warn!("[Middleware Request] Endpoint is not resolved and will be ignored. {}", client.url());
 
                     ()
                 }
             };
 
-            info!("[Post Request] {} took {} ms", client.url(), post_request_timer.elapsed().as_millis());
+            info!("[Middleware Request] {} took {} ms", client.url(), timer.elapsed().as_millis());
         }
 
-        // Response to origin
-        Ok(container.response_from_response()?)
+        Ok(container.into_response()?)
     }
 }
 

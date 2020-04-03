@@ -1,227 +1,173 @@
-use std::time::Instant;
-use core::time::Duration;
-use hyper::{Uri, Method, Version, Body, Request, Response};
+use hyper::{Uri, Method, Version, HeaderMap};
 use bytes::Bytes;
-use crate::kubeware::{PreRequest, PreResponse, RequestHeader, PostRequest, PostResponse};
-use hyper::http::header::{HeaderName, HeaderValue, HeaderMap};
-use hyper::header::CONTENT_LENGTH;
+use crate::kubeware::{Header};
+use hyper::header::{HeaderName, HeaderValue};
+use crate::request_container::ContainerState::MiddlewareRequest;
 
 type GenericError = Box<dyn std::error::Error + Send + Sync>;
 type Result<T> = std::result::Result<T, GenericError>;
-
-const KUBEWARE_TIME_HEADER: &str = "x-kubeware-time";
-const BACKEND_TIME_HEADER: &str  = "x-backend-time";
 
 #[derive(Default)]
 pub struct HttpContainer {
     pub headers: HeaderMap,
     pub body: Bytes
 }
-// TODO: implement builder and make some fields optional
+
+pub enum ContainerState {
+    MiddlewareRequest,
+    #[allow(dead_code)]
+    Response,
+    #[allow(dead_code)]
+    MiddlewareResponse
+}
+
 pub struct RequestContainer {
     method: Method,
-    path: Uri,
+    uri: Uri,
     version: Version,
-    status_code: u16,
+    status_code: Option<u16>,
     request: HttpContainer,
     response: HttpContainer,
-    backend_elapsed: Duration,
-    timer: Instant
+    state: ContainerState
+}
+
+pub struct RequestContainerBuilder {
+    method: Option<Method>,
+    uri: Option<Uri>,
+    version: Option<Version>,
+    request: HttpContainer
+}
+
+impl RequestContainerBuilder {
+    pub fn new() -> RequestContainerBuilder {
+        RequestContainerBuilder {
+            method: None,
+            uri: None,
+            version: None,
+            request: HttpContainer {
+                headers: HeaderMap::default(),
+                body: Bytes::default()
+            }
+        }
+    }
+
+    pub fn method(mut self, method: Method) -> RequestContainerBuilder {
+        self.method = Some(method);
+        self
+    }
+
+    pub fn uri(mut self, uri: Uri) -> RequestContainerBuilder {
+        self.uri = Some(uri);
+        self
+    }
+
+    pub fn version(mut self, version: Version) -> RequestContainerBuilder {
+        self.version = Some(version);
+        self
+    }
+
+    pub fn headers(mut self, headers: HeaderMap) -> RequestContainerBuilder {
+        self.request.headers = headers;
+        self
+    }
+
+    pub fn body (mut self, body: Bytes) -> RequestContainerBuilder {
+        self.request.body = body;
+        self
+    }
+
+    pub fn build(self) -> RequestContainer {
+        RequestContainer {
+            method: self.method.clone().unwrap(),
+            uri: self.uri.clone().unwrap(),
+            version: self.version.unwrap(),
+            status_code: None,
+            request: self.request.into(),
+            response: HttpContainer {
+                headers: HeaderMap::default(),
+                body: Bytes::default()
+            },
+            state: MiddlewareRequest
+        }
+    }
 }
 
 impl RequestContainer {
-    pub fn backend_elapsed(&mut self, elapsed: Duration) {
-        self.backend_elapsed = elapsed
-    }
+    pub fn state_set(&mut self, state: ContainerState) { self.state = state }
 
-    pub async fn from_request(request: Request<Body>) -> Result<RequestContainer> {
-        let (metadata, body) = request.into_parts();
+    pub fn state(&mut self) -> &ContainerState { &self.state }
 
-        Ok(RequestContainer {
-            method: metadata.method.to_owned(),
-            path: metadata.uri.to_owned(),
-            version: metadata.version.to_owned(),
-            status_code: 500,
-            request: HttpContainer {
-                headers: metadata.headers.to_owned(),
-                body: hyper::body::to_bytes(body).await?
-            },
-            response: HttpContainer {
-                headers: HeaderMap::default(),
-                body: Bytes::default(),
-            },
-            backend_elapsed: Duration::from_millis(0),
-            timer: Instant::now()
-        })
-    }
+    pub fn response_headers_set(&mut self, headers: HeaderMap) { self.response.headers = headers }
 
-    pub fn parse_pre_request(&mut self, response: &PreResponse) -> Result<()> {
+    pub fn response_body_set_bytes(&mut self, body: Bytes) { self.response.body = body }
 
-        match response.status_code == 0 {
-            true => (),
-            false => self.status_code = response.status_code as u16
+    pub fn response_body_set_string(&mut self, body: String) { self.response.body = Bytes::from(body) }
+
+    pub fn status_code_set(&mut self, status_code: u16) { self.status_code = Some(status_code) }
+
+    pub fn add_headers(&mut self, headers:&Vec<Header>) -> Result<()> {
+        let mut container = match self.state {
+            MiddlewareRequest => self.request.headers.to_owned(),
+            _ => self.response.headers.to_owned()
         };
 
-        // Remove headers
-        for header in &response.removed_headers {
-            self.request.headers.remove(header);
+        for header in headers {
+            container.insert(HeaderName::from_lowercase(header.name.to_lowercase().as_bytes())?,
+                       HeaderValue::from_str(&header.value)?);
         }
-
-        // Add headers
-        for header in &response.added_headers {
-            self.request.headers.insert(HeaderName::from_lowercase(header.name.to_lowercase().as_bytes())?,
-                                            HeaderValue::from_str(&header.value)?);
-        }
-
-        match response.body.is_empty() {
-            true => (),
-            false => self.request.body = Bytes::from(response.body.clone())
-        };
 
         Ok(())
     }
 
-    pub fn parse_post_request(&mut self, response: &PostResponse) -> Result<()> {
+    pub fn request_body_set_string(&mut self, body: String) { self.request.body = Bytes::from(body) }
 
-        match response.status_code == 0 {
-            true => (),
-            false => self.status_code = response.status_code as u16
+    pub fn remove_headers(&mut self, headers: &Vec<String>) {
+        let mut container = match self.state {
+            MiddlewareRequest => self.request.headers.to_owned(),
+            _ => self.response.headers.to_owned()
         };
 
-        // Remove headers
-        for header in &response.removed_headers {
-            self.response.headers.remove(header);
+        for header in headers {
+            container.remove(header);
         }
+    }
 
-        // TODO: figure out how to return multiple set-cookie headers
+    pub fn method (&self) -> String { self.method.to_string() }
 
-        // Add headers
-        for header in &response.added_headers {
-            self.response.headers.append(HeaderName::from_lowercase(header.name.to_lowercase().as_bytes())?,
-                                         HeaderValue::from_str(&header.value)?);
-        }
+    pub fn version (&self) -> Version { self.version }
 
-        match response.body.is_empty() {
-            true => (),
-            false => self.response.body = Bytes::from(response.body.clone())
+    pub fn uri (&self) -> String { self.uri.to_string() }
+
+    pub fn headers (&self) -> Vec<Header> {
+        let container = match self.state {
+            MiddlewareRequest => &self.request.headers,
+            _ => &self.response.headers
         };
 
-        Ok(())
+        container.iter().map(|x| Header {
+            name: x.0.to_string(),
+            value: x.1.to_str().unwrap().to_string()
+        }).collect::<Vec<Header>>()
     }
 
-    pub async fn parse_be_response(&mut self, response: Response<Body>) -> Result<()> {
-        let (metadata, body) = response.into_parts();
-
-        self.response.headers = metadata.headers.to_owned();
-        self.status_code = metadata.status.as_u16();
-        self.response.body = hyper::body::to_bytes(body).await?;
-
-        Ok(())
+    pub fn request_headers (&self) -> Vec<Header> {
+        self.request.headers.iter().map(|x| Header {
+            name: x.0.to_string(),
+            value: x.1.to_str().unwrap().to_string()
+        }).collect::<Vec<Header>>()
     }
 
-    pub fn generate_pre_request(&mut self) -> Result<PreRequest> {
-        Ok(PreRequest {
-            method: self.method.to_string(),
-            path: self.path.to_string(),
-            headers: self.request.headers.iter().map(|x| RequestHeader {
-                name: x.0.to_string(),
-                value: x.1.to_str().unwrap().to_string()
-            }).collect::<Vec<RequestHeader>>(),
-            body: std::str::from_utf8(self.request.body.as_ref())?.to_string()
-        })
+    pub fn response_headers (&self) -> Vec<Header> {
+        self.response.headers.iter().map(|x| Header {
+            name: x.0.to_string(),
+            value: x.1.to_str().unwrap().to_string()
+        }).collect::<Vec<Header>>()
     }
 
-    pub fn generate_post_request(&mut self) -> Result<PostRequest> {
-        Ok(PostRequest {
-            method: self.method.to_string(),
-            path: self.path.to_string(),
-            request_headers: self.request.headers.iter().map(|x| RequestHeader {
-                name: x.0.to_string(),
-                value: x.1.to_str().unwrap().to_string()
-            }).collect(),
-            response_headers: self.response.headers.iter().map(|x| RequestHeader {
-                name: x.0.to_string(),
-                value: x.1.to_str().unwrap().to_string()
-            }).collect(),
-            request_body: std::str::from_utf8(self.request.body.as_ref())?.to_string(),
-            response_body: std::str::from_utf8(self.response.body.as_ref())?.to_string()
-        })
-    }
+    pub fn request_body (&self) -> Result<String> { Ok(std::str::from_utf8(self.request.body.as_ref())?.to_string()) }
 
-    pub fn request_from_pre_request(&mut self, uri: String) -> Result<Request<Body>> {
-        let mut request_builder = Request::builder()
-            .method(self.method.clone())
-            .uri(uri)
-            .version(self.version.clone());
+    pub fn response_body (&self) -> Result<String> { Ok(std::str::from_utf8(self.response.body.as_ref())?.to_string()) }
 
-        let headers_dict = request_builder.headers_mut().unwrap();
+    pub fn status_code (&self) -> Option<u16> { self.status_code }
 
-        for header in &self.request.headers {
-            headers_dict.insert(header.0, header.1.clone());
-        }
-
-        headers_dict.insert(CONTENT_LENGTH, self.request.body.len().into());
-
-        Ok(request_builder.body(self.request.body.clone().into())?)
-    }
-
-    pub fn response_from_response(&mut self) -> Result<Response<Body>> {
-        let mut response = Response::builder()
-            .version(self.version)
-            .status(self.status_code)
-            .header(KUBEWARE_TIME_HEADER, HeaderValue::from_str(&self.timer.elapsed().as_millis().to_string())?)
-            .header(BACKEND_TIME_HEADER, HeaderValue::from_str(&self.backend_elapsed.as_millis().to_string())?);
-
-        let headers_dict = response.headers_mut().unwrap();
-
-        for header in &self.response.headers {
-            headers_dict.insert(header.0, header.1.clone());
-        }
-
-        headers_dict.insert(CONTENT_LENGTH, self.response.body.len().into());
-
-        info!("[{}] {} - {} | {} ms.", self.method, self.path, self.status_code, self.timer.elapsed().as_millis());
-
-        Ok(response.body(self.response.body.clone().into()).unwrap())
-    }
-
-    pub fn response_from_pre_request(&mut self) -> Result<Response<Body>> {
-        let mut response = Response::builder()
-            .status(self.status_code)
-            .version(self.version)
-            .header(KUBEWARE_TIME_HEADER, HeaderValue::from_str(&self.timer.elapsed().as_millis().to_string())?)
-            .header(BACKEND_TIME_HEADER, HeaderValue::from_str(&self.backend_elapsed.as_millis().to_string())?);
-
-        let headers_dict = response.headers_mut().unwrap();
-
-        for header in &self.request.headers {
-            headers_dict.insert(header.0, header.1.clone());
-        }
-
-        headers_dict.insert(CONTENT_LENGTH, self.request.body.len().into());
-
-        info!("[{}] {} - {} | {} ms.", self.method, self.path, self.status_code, self.timer.elapsed().as_millis());
-
-        Ok(response.body(self.request.body.clone().into()).unwrap())
-    }
-
-    pub fn response_from_post_request(&mut self) -> Result<Response<Body>> {
-        let mut response = Response::builder()
-            .status(self.status_code)
-            .version(self.version)
-            .header(KUBEWARE_TIME_HEADER, HeaderValue::from_str(&self.timer.elapsed().as_millis().to_string())?)
-            .header(BACKEND_TIME_HEADER, HeaderValue::from_str(&self.backend_elapsed.as_millis().to_string())?);
-
-        let headers_dict = response.headers_mut().unwrap();
-
-        for header in &self.response.headers {
-            headers_dict.insert(header.0, header.1.clone());
-        }
-
-        headers_dict.insert(CONTENT_LENGTH, self.response.body.len().into());
-
-        info!("[{}] {} - {} | {} ms.", self.method, self.path, self.status_code, self.timer.elapsed().as_millis());
-
-        Ok(response.body(self.response.body.clone().into()).unwrap())
-    }
 }

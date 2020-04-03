@@ -11,8 +11,8 @@ pub struct Config {
 #[derive(Deserialize,Debug,Clone)]
 pub struct Service {
     pub url: String,
-    pub pre_request: bool,
-    pub post_request: bool
+    pub request: bool,
+    pub response: bool
 }
 
 #[derive(Deserialize,Debug,Clone)]

@@ -4,6 +4,7 @@ mod config;
 mod tower_service;
 mod request_handler;
 mod kubeware_service;
+mod container_handler;
 
 extern crate pretty_env_logger;
 #[macro_use]
