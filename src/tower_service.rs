@@ -14,7 +14,6 @@ pub struct Builder
     pub http_client: Client<HttpConnector>,
     pub services: Arc<Services>,
     pub config: Config,
-    // TODO: test out whether this properly works
     pub mutex: Mutex<bool>
 }
 

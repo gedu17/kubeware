@@ -1,19 +1,19 @@
 use tonic::transport::Channel;
-use crate::kubeware::proxy_client::ProxyClient;
+use crate::kubeware::middleware_client::MiddlewareClient;
 
 #[derive(Clone)]
 pub struct KubewareService {
     url: String,
-    connection: Option<ProxyClient<Channel>>,
-    pre_request: bool,
-    post_request: bool
+    connection: Option<MiddlewareClient<Channel>>,
+    request: bool,
+    response: bool
 }
 
 pub struct KubewareServiceBuilder {
     url: Option<String>,
-    connection: Option<ProxyClient<Channel>>,
-    pre_request: Option<bool>,
-    post_request: Option<bool>
+    connection: Option<MiddlewareClient<Channel>>,
+    request: Option<bool>,
+    response: Option<bool>
 }
 
 impl KubewareServiceBuilder {
@@ -21,8 +21,8 @@ impl KubewareServiceBuilder {
         KubewareServiceBuilder {
             url: None,
             connection: None,
-            pre_request: None,
-            post_request: None
+            request: None,
+            response: None
         }
     }
 
@@ -31,17 +31,17 @@ impl KubewareServiceBuilder {
         self
     }
 
-    pub fn pre_request(mut self, enabled: bool) -> KubewareServiceBuilder {
-        self.pre_request = Some(enabled);
+    pub fn request(mut self, enabled: bool) -> KubewareServiceBuilder {
+        self.request = Some(enabled);
         self
     }
 
-    pub fn post_request(mut self, enabled: bool) -> KubewareServiceBuilder {
-        self.post_request = Some(enabled);
+    pub fn response(mut self, enabled: bool) -> KubewareServiceBuilder {
+        self.response = Some(enabled);
         self
     }
 
-    pub fn connection(mut self, connection: Option<ProxyClient<Channel>>) -> KubewareServiceBuilder {
+    pub fn connection(mut self, connection: Option<MiddlewareClient<Channel>>) -> KubewareServiceBuilder {
         self.connection = connection;
         self
     }
@@ -50,27 +50,21 @@ impl KubewareServiceBuilder {
         KubewareService {
             url: self.url.as_ref().unwrap().to_string(),
             connection: self.connection.to_owned(),
-            pre_request: self.pre_request.unwrap(),
-            post_request: self.post_request.unwrap()
+            request: self.request.unwrap_or(false),
+            response: self.response.unwrap_or(false)
         }
     }
 }
 
 
 impl KubewareService {
-    pub fn url(&self) -> &String {
-        &self.url
-    }
+    pub fn url(&self) -> &String { &self.url }
 
     #[allow(dead_code)]
-    pub fn pre_request(&self) -> bool {
-        self.pre_request
-    }
+    pub fn request(&self) -> bool {  self.request }
 
     #[allow(dead_code)]
-    pub fn post_request(&self) -> bool { self.post_request }
+    pub fn response(&self) -> bool { self.response }
 
-    pub fn connection(&self) -> &Option<ProxyClient<Channel>> {
-        &self.connection
-    }
+    pub fn connection(&self) -> &Option<MiddlewareClient<Channel>> { &self.connection }
 }

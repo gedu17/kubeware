@@ -1,4 +1,4 @@
-use crate::kubeware::proxy_client::ProxyClient;
+use crate::kubeware::middleware_client::MiddlewareClient;
 use crate::config::{Service, Config};
 use crate::kubeware_service::{KubewareService, KubewareServiceBuilder};
 
@@ -16,12 +16,12 @@ impl Services {
         &self.inner
     }
 
-    pub fn pre_request(&self) -> Vec<&KubewareService> {
-        self.inner.iter().filter(|x| x.pre_request() == true).collect()
+    pub fn request(&self) -> Vec<&KubewareService> {
+        self.inner.iter().filter(|x| x.request() == true).collect()
     }
 
-    pub fn post_request(&self) -> Vec<&KubewareService> {
-        self.inner.iter().filter(|x| x.post_request() == true).collect()
+    pub fn response(&self) -> Vec<&KubewareService> {
+        self.inner.iter().filter(|x| x.response() == true).collect()
     }
 
     pub fn with_config(config: &Config) -> Services {
@@ -57,14 +57,14 @@ impl Services {
     }
 
     pub async fn insert(&mut self, service: &Service) -> Result<()> {
-        let connection = ProxyClient::connect(service.url.clone()).await;
+        let connection = MiddlewareClient::connect(service.url.clone()).await;
 
         self.inner.push(match connection {
             Ok(val) => KubewareServiceBuilder::new()
                 .url(service.url.clone())
                 .connection(Some(val))
-                .pre_request(service.pre_request)
-                .post_request(service.post_request)
+                .request(service.request)
+                .response(service.response)
                 .build(),
             Err(err) => {
                 warn!("Error connecting to service [{}]: {}", service.url, err);
@@ -72,8 +72,8 @@ impl Services {
                 KubewareServiceBuilder::new()
                     .url(service.url.clone())
                     .connection(None)
-                    .pre_request(service.pre_request)
-                    .post_request(service.post_request)
+                    .request(service.request)
+                    .response(service.response)
                     .build()
             }
         });
