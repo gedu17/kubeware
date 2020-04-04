@@ -3,6 +3,8 @@ name: Docker latest
 on:
   push:
     branches: [ master ]
+  release:
+    types: [ published ]
 
 jobs:
   build:
