@@ -3,13 +3,9 @@ name: Push Docker image
 on:
   push:
     branches: [ master, tag/* ]
-  # pull_request:
-  #   branches: [ master ]
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
 
     steps:
