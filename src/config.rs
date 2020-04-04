@@ -11,11 +11,13 @@ pub struct Config {
 #[derive(Deserialize,Debug,Clone)]
 pub struct Service {
     pub url: String,
+    pub timeout_ms: Option<u32>,
     pub request: bool,
     pub response: bool
 }
 
 #[derive(Deserialize,Debug,Clone)]
 pub struct Backend {
-    pub url: String
+    pub url: String,
+    pub timeout_ms: Option<u32>
 }

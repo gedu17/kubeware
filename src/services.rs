@@ -65,6 +65,7 @@ impl Services {
                 .connection(Some(val))
                 .request(service.request)
                 .response(service.response)
+                .timeout_millis(service.timeout_ms)
                 .build(),
             Err(err) => {
                 warn!("Error connecting to service [{}]: {}", service.url, err);
@@ -74,6 +75,7 @@ impl Services {
                     .connection(None)
                     .request(service.request)
                     .response(service.response)
+                    .timeout_millis(service.timeout_ms)
                     .build()
             }
         });
