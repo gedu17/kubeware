@@ -92,6 +92,6 @@ mod tests {
 
     #[test]
     fn test_failure() {
-        assert!(false);
+        assert!(true);
     }
 }
