@@ -1,8 +1,9 @@
-name: Push Docker image
+name: Docker
 
 on:
   push:
-    branches: [ master, tag/* ]
+    branches: [ master ]
+    tags: [ v* ]
 
 jobs:
   build:
