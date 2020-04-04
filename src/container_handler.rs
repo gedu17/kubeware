@@ -5,12 +5,10 @@ use crate::kubeware::{RequestRequest, RequestResponse, ResponseRequest, Response
 use std::time::{Duration, Instant};
 use hyper::http::method::Method;
 use std::str::FromStr;
+use crate::{KUBEWARE_TIME_HEADER, BACKEND_TIME_HEADER};
 
 type GenericError = Box<dyn std::error::Error + Send + Sync>;
 type Result<T> = std::result::Result<T, GenericError>;
-
-const KUBEWARE_TIME_HEADER: &str = "x-kubeware-time";
-const BACKEND_TIME_HEADER: &str  = "x-backend-time";
 
 pub struct ContainerHandler {
     container: RequestContainer,
@@ -23,6 +21,10 @@ impl ContainerHandler {
     pub fn state_set(&mut self, state: ContainerState) { self.container.state_set(state) }
 
     pub fn backend_elapsed_set(&mut self, elapsed: Duration) { self.backend_elapsed = Some(elapsed) }
+
+    pub fn backend_elapsed(&mut self) -> Option<Duration> { self.backend_elapsed }
+
+    pub fn timer(&mut self) -> Instant { self.timer }
 
     pub async fn new(request: Request<Body>, url: String) -> Result<ContainerHandler> {
         let (metadata, body) = request.into_parts();

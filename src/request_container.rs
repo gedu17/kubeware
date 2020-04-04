@@ -3,6 +3,7 @@ use bytes::Bytes;
 use crate::kubeware::{Header};
 use hyper::header::{HeaderName, HeaderValue};
 use crate::request_container::ContainerState::MiddlewareRequest;
+use std::str::from_utf8;
 
 type GenericError = Box<dyn std::error::Error + Send + Sync>;
 type Result<T> = std::result::Result<T, GenericError>;
@@ -167,9 +168,9 @@ impl RequestContainer {
         }).collect::<Vec<Header>>()
     }
 
-    pub fn request_body (&self) -> Result<String> { Ok(std::str::from_utf8(self.request.body.as_ref())?.to_string()) }
+    pub fn request_body (&self) -> Result<String> { Ok(from_utf8(self.request.body.as_ref())?.to_string()) }
 
-    pub fn response_body (&self) -> Result<String> { Ok(std::str::from_utf8(self.response.body.as_ref())?.to_string()) }
+    pub fn response_body (&self) -> Result<String> { Ok(from_utf8(self.response.body.as_ref())?.to_string()) }
 
     pub fn status_code (&self) -> Option<u16> { self.status_code }
 

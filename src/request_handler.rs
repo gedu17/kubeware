@@ -3,7 +3,7 @@ use crate::services::Services;
 use hyper::{Client, Request, Body, Response};
 use hyper::client::HttpConnector;
 use crate::config::{Config};
-use std::time::{Instant};
+use std::time::{Instant, Duration};
 use hyper::service::Service;
 use std::pin::Pin;
 use std::future::Future;
@@ -11,8 +11,13 @@ use std::task::{Context, Poll};
 use crate::kubeware::{ResponseStatus};
 use crate::container_handler::ContainerHandler;
 use crate::request_container::ContainerState::{MiddlewareResponse, Response as BackendResponse};
+use tonic::metadata::{MetadataValue};
+use crate::{DEFAULT_TIMEOUT_MILLIS, KUBEWARE_TIME_HEADER};
+use hyper::header::HeaderValue;
 
+type HandlerResult<T> = std::result::Result<T, GenericError>;
 type GenericError = Box<dyn std::error::Error + Send + Sync>;
+const GRPC_TIMEOUT_HEADER: &str = "grpc-timeout";
 
 pub struct RequestHandler
 {
@@ -30,78 +35,111 @@ impl RequestHandler {
         response.status(500).body(body).unwrap()
     }
 
-    fn gateway_error() -> Response<Body> {
-        let response = Response::builder();
+    fn gateway_error(timer: Instant) -> HandlerResult<Response<Body>> {
+        let response = Response::builder()
+            .header(KUBEWARE_TIME_HEADER, HeaderValue::from_str(&timer.elapsed().as_millis().to_string())?);
         let body = Body::from(Vec::from(&b"Bad Gateway"[..]));
 
-        response.status(502).body(body).unwrap()
+        Ok(response.status(502).body(body).unwrap())
     }
 
-    fn service_unavailable_error() -> Response<Body> {
-        let response = Response::builder();
+    fn service_unavailable_error(timer: Instant) -> HandlerResult<Response<Body>> {
+        let response = Response::builder()
+            .header(KUBEWARE_TIME_HEADER, HeaderValue::from_str(&timer.elapsed().as_millis().to_string())?);
         let body = Body::from(Vec::from(&b"Service Unavailable"[..]));
 
-        response.status(503).body(body).unwrap()
+        Ok(response.status(503).body(body).unwrap())
+    }
+
+    fn gateway_timeout(timer: Instant) -> HandlerResult<Response<Body>> {
+        let response = Response::builder()
+            .header(KUBEWARE_TIME_HEADER, HeaderValue::from_str(&timer.elapsed().as_millis().to_string())?);
+        let body = Body::from(Vec::from(&b"Gateway Timeout"[..]));
+
+        Ok(response.status(504).body(body).unwrap())
     }
 
     async fn handle(req: Request<Body>, services: Arc<Services>, config: Config, http_client: Client<HttpConnector>) -> Result<Response<Body>, GenericError> {
         let url = [config.backend.url.as_str(), req.uri().path()].join("");
         let mut container = ContainerHandler::new(req, url).await?;
         let services = services.to_owned();
+        let backend_timeout = Duration::from_millis(config.backend.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MILLIS) as u64);
 
         for client in services.request() {
             let timer = Instant::now();
 
             match client.connection().clone() {
                 Some(mut connection) => {
-                    let request = tonic::Request::new(container.into_middleware_request()?);
+                    let timeout = [client.timeout().as_millis().to_string(), "m".to_string()].join("");
+                    let mut request = tonic::Request::new(container.into_middleware_request()?);
+                    let metadata = request.metadata_mut();
+                    metadata.insert(GRPC_TIMEOUT_HEADER, MetadataValue::from_str(timeout.as_str())?);
 
-                    match connection.handle_request(request).await {
-                        Ok(response) => {
-                            let data = response.into_inner();
+                    match tokio::time::timeout(client.timeout(), connection.handle_request(request)).await {
+                        Ok(val) => {
+                            match val {
+                                Ok(response) => {
+                                    let data = response.into_inner();
 
-                            match ResponseStatus::from_i32(data.status) {
-                                Some(ResponseStatus::Success) => container.handle_middleware_request(&data)?,
-                                Some(ResponseStatus::Continue) => (),
-                                Some(ResponseStatus::Stop) => {
-                                    container.handle_middleware_request(&data)?;
+                                    match ResponseStatus::from_i32(data.status) {
+                                        Some(ResponseStatus::Success) => container.handle_middleware_request(&data)?,
+                                        Some(ResponseStatus::Continue) => (),
+                                        Some(ResponseStatus::Stop) => {
+                                            container.handle_middleware_request(&data)?;
 
-                                    return Ok(container.into_response()?)
+                                            return Ok(container.into_response()?)
+                                        },
+                                        None => ()
+                                    };
                                 },
-                                None => ()
-                            };
-                        },
-                        Err(err) => {
-                            error!("[Middleware Request] Failed to get response from {}: {:?}", client.url(), err);
+                                Err(err) => {
+                                    error!("[Middleware Request] Failed to get response from {}: {:?}", client.url(), err);
 
-                            return Ok(RequestHandler::service_unavailable_error())
+                                    return Ok(RequestHandler::service_unavailable_error(container.timer())?)
+                                }
+                            }
+                        },
+                        Err(_err) => {
+                            error!("[Middleware Request] Timed out {}: elapsed {} ms.", client.url(), client.timeout().as_millis());
+
+                            return Ok(RequestHandler::service_unavailable_error(container.timer())?)
                         }
-                    };
+                    }
                 },
                 None => {
                     warn!("[Middleware Request] Endpoint is not resolved and will be ignored. {}", client.url());
                 }
             };
 
-            info!("[Middleware Request] {} took {} ms", client.url(), timer.elapsed().as_millis());
+            info!("[Middleware Request] {} took {} ms.", client.url(), timer.elapsed().as_millis());
         }
 
         container.state_set(BackendResponse);
 
         let backend_timer = Instant::now();
 
-        match http_client.request(container.into_request()?).await {
-            Ok(data) => {
-                container.backend_elapsed_set(backend_timer.elapsed());
-                container.handle_response(data).await?;
-            },
-            Err(err) => {
-                error!("[Backend] Failed to get response from backend. {}", err);
+        match tokio::time::timeout(backend_timeout, http_client.request(container.into_request()?)).await {
+            Ok(val) => {
+                match val {
+                    Ok(data) => {
+                        container.backend_elapsed_set(backend_timer.elapsed());
+                        container.handle_response(data).await?;
+                    },
+                    Err(err) => {
+                        error!("[Backend] Failed to get response from backend. {}", err);
 
-                return Ok(RequestHandler::gateway_error())
+                        return Ok(RequestHandler::gateway_error(container.timer())?)
+                    }
+                }
+            },
+            Err(_err) => {
+                error!("[Backend] Timed out after {} ms.", backend_timeout.as_millis());
+
+                return Ok(RequestHandler::gateway_timeout(container.timer())?)
             }
         }
 
+        info!("[Backend Request] took {} ms.", container.backend_elapsed().unwrap_or(Duration::from_millis(0)).as_millis());
         container.state_set(MiddlewareResponse);
 
         for client in services.response() {
@@ -109,27 +147,39 @@ impl RequestHandler {
 
             match client.connection().clone() {
                 Some(mut connection) => {
-                    let request = tonic::Request::new(container.into_middleware_response()?);
+                    let timeout = [client.timeout().as_millis().to_string(), "m".to_string()].join("");
+                    let mut request = tonic::Request::new(container.into_middleware_response()?);
+                    let metadata = request.metadata_mut();
+                    metadata.insert(GRPC_TIMEOUT_HEADER, MetadataValue::from_str(timeout.as_str())?);
 
-                    match connection.handle_response(request).await {
-                        Ok(response) => {
-                            let data = response.into_inner();
+                    match tokio::time::timeout(client.timeout(), connection.handle_response(request)).await {
+                        Ok(val) => {
+                            match val {
+                                Ok(response) => {
+                                    let data = response.into_inner();
 
-                            match ResponseStatus::from_i32(data.status) {
-                                Some(ResponseStatus::Success) => container.handle_middleware_response(&data)?,
-                                Some(ResponseStatus::Continue) => (),
-                                Some(ResponseStatus::Stop) => {
-                                    container.handle_middleware_response(&data)?;
+                                    match ResponseStatus::from_i32(data.status) {
+                                        Some(ResponseStatus::Success) => container.handle_middleware_response(&data)?,
+                                        Some(ResponseStatus::Continue) => (),
+                                        Some(ResponseStatus::Stop) => {
+                                            container.handle_middleware_response(&data)?;
 
-                                    return Ok(container.into_response()?)
+                                            return Ok(container.into_response()?)
+                                        },
+                                        None => ()
+                                    }
                                 },
-                                None => ()
+                                Err(err) => {
+                                    error!("[Middleware Response] Failed to get response from {}: {:?}", client.url(), err);
+
+                                    return Ok(RequestHandler::service_unavailable_error(container.timer())?)
+                                }
                             }
                         },
-                        Err(err) => {
-                            error!("[Middleware Response] Failed to get response from {}: {:?}", client.url(), err);
+                        Err(_err) => {
+                            error!("[Middleware Response] Timed out {}: elapsed {} ms.", client.url(), client.timeout().as_millis());
 
-                            return Ok(RequestHandler::service_unavailable_error())
+                            return Ok(RequestHandler::service_unavailable_error(container.timer())?)
                         }
                     }
                 },
@@ -138,7 +188,7 @@ impl RequestHandler {
                 }
             };
 
-            info!("[Middleware Response] {} took {} ms", client.url(), timer.elapsed().as_millis());
+            info!("[Middleware Response] {} took {} ms.", client.url(), timer.elapsed().as_millis());
         }
 
         Ok(container.into_response()?)

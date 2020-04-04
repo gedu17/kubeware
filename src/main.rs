@@ -27,7 +27,10 @@ type GenericError = Box<dyn std::error::Error + Send + Sync>;
 type Result<T> = std::result::Result<T, GenericError>;
 
 const LOOPBACK: &str = "127.0.0.1";
-const PORT: u16 = 17000;
+const PORT: u16 = 17_000;
+const DEFAULT_TIMEOUT_MILLIS: u32 = 5_000;
+const KUBEWARE_TIME_HEADER: &str = "x-kubeware-time";
+const BACKEND_TIME_HEADER: &str  = "x-backend-time";
 
 pub mod kubeware {
     tonic::include_proto!("kubeware");
