@@ -1,5 +1,6 @@
 ip = "127.0.0.1"
 port = 17000
+log = "info"
 
 [backend]
 url = "http://127.0.0.1:17001"
