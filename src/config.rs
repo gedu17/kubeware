@@ -20,5 +20,12 @@ pub struct Service {
 #[derive(Deserialize,Debug,Clone)]
 pub struct Backend {
     pub url: String,
-    pub timeout_ms: Option<u32>
+    pub timeout_ms: Option<u32>,
+    pub version: Option<HttpVersion>
+}
+
+#[derive(Deserialize,Debug,Clone)]
+pub enum HttpVersion {
+    HTTP,
+    HTTP2
 }

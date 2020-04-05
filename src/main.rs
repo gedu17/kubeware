@@ -10,7 +10,7 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-use crate::config::Config;
+use crate::config::{Config, HttpVersion};
 use std::fs::{File};
 use std::env::{var, set_var};
 use std::path::{Path};
@@ -72,8 +72,16 @@ async fn main() -> Result<()> {
         services.insert(service).await?;
     }
 
+    let http_client = match &config.backend.version {
+        Some(version) => match version {
+            HttpVersion::HTTP => Client::new(),
+            HttpVersion::HTTP2 => Client::builder().http2_only(true).build_http()
+        },
+        _ => Client::new()
+    };
+
     let binded_server = Server::bind(&address).serve(Builder {
-        http_client: Client::new(),
+        http_client,
         config,
         mutex: Mutex::new(false),
         services: Arc::new(services)
