@@ -56,15 +56,13 @@ async fn main() -> Result<()> {
         .next()
         .unwrap();
 
-    // Set logging level
-    match &config.log {
-        Some(val) => set_var(RUST_LOG, val),
-        None => {
-            match var(RUST_LOG) {
-                Err(_err) => set_var(RUST_LOG, DEFAULT_LOGGING_LEVEL),
-                _ => ()
-            }
-        }
+    // If env var is set, do nothing (it overrides everything), otherwise check config
+    match var(RUST_LOG) {
+        Err(_err) => match &config.log {
+            Some(val) => set_var(RUST_LOG, val),
+            None => set_var(RUST_LOG, DEFAULT_LOGGING_LEVEL)
+        },
+        _ => ()
     };
 
     pretty_env_logger::try_init_timed()?;
