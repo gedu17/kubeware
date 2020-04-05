@@ -123,10 +123,9 @@ impl ContainerHandler {
             headers_dict.insert(HeaderName::from_lowercase(header.name.to_lowercase().as_bytes())?, HeaderValue::from_str(header.value.as_str())?);
         }
 
-        let body = self.container.request_body()?;
-        headers_dict.insert(CONTENT_LENGTH, body.len().into());
+        headers_dict.remove(CONTENT_LENGTH);
 
-        Ok(request_builder.body(body.into())?)
+        Ok(request_builder.body(self.container.request_body()?.into())?)
     }
 
     pub fn into_response(&mut self) -> Result<Response<Body>> {
@@ -147,11 +146,10 @@ impl ContainerHandler {
             headers_dict.insert(HeaderName::from_lowercase(header.name.to_lowercase().as_bytes())?, HeaderValue::from_str(header.value.as_str())?);
         }
 
-        let body = self.container.body()?;
-        headers_dict.insert(CONTENT_LENGTH, body.len().into());
+        headers_dict.remove(CONTENT_LENGTH);
 
         info!("[{}] {} - {} | {} ms.", self.container.method(), self.container.uri(), self.container.status_code().unwrap_or(500), self.timer.elapsed().as_millis());
 
-        Ok(response.body(body.into())?)
+        Ok(response.body(self.container.body()?.into())?)
     }
 }

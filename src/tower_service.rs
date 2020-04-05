@@ -24,7 +24,7 @@ impl<T> Service<T> for Builder {
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let services = Arc::clone(&self.services);
-        // TODO: test out latency / mutex on higher load !
+        
         match self.mutex.lock() {
             Ok(_) => {
                 if services.all().iter().any(|x| x.connection().is_none()) {
