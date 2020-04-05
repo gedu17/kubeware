@@ -12,7 +12,7 @@ extern crate log;
 
 use crate::config::Config;
 use std::fs::{File};
-use std::env::{var};
+use std::env::{var, set_var};
 use std::path::{Path};
 use std::io::Read;
 use hyper::{Client, Server};
@@ -31,6 +31,8 @@ const PORT: u16 = 17_000;
 const DEFAULT_TIMEOUT_MILLIS: u32 = 5_000;
 const KUBEWARE_TIME_HEADER: &str = "x-kubeware-time";
 const BACKEND_TIME_HEADER: &str  = "x-backend-time";
+const RUST_LOG: &str = "RUST_LOG";
+const DEFAULT_LOGGING_LEVEL: &str = "INFO";
 
 pub mod kubeware {
     tonic::include_proto!("kubeware");
@@ -38,7 +40,6 @@ pub mod kubeware {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    pretty_env_logger::try_init_timed()?;
 
     let config_file = match var("CONFIG_FILE") {
         Ok(value) => File::open(Path::new(&value)),
@@ -55,6 +56,18 @@ async fn main() -> Result<()> {
         .next()
         .unwrap();
 
+    // Set logging level
+    match &config.log {
+        Some(val) => set_var(RUST_LOG, val),
+        None => {
+            match var(RUST_LOG) {
+                Err(_err) => set_var(RUST_LOG, DEFAULT_LOGGING_LEVEL),
+                _ => ()
+            }
+        }
+    };
+
+    pretty_env_logger::try_init_timed()?;
     let mut services = Services::with_config(&config);
 
     for service in &config.services {

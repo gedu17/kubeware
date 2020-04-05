@@ -4,6 +4,7 @@ use serde_derive::Deserialize;
 pub struct Config {
     pub ip: Option<String>,
     pub port: Option<u16>,
+    pub log: Option<String>,
     pub backend: Backend,
     pub services: Vec<Service>
 }
