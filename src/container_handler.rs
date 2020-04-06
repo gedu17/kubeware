@@ -39,15 +39,15 @@ impl ContainerHandler {
         Ok(ContainerHandler {
             container: request_container.build(),
             url,
-            backend_elapsed: None,
+            backend_elapsed: Some(Duration::from_millis(0)),
             timer: Instant::now()
         })
     }
 
     pub fn handle_middleware_request(&mut self, response: &RequestResponse) -> Result<()> {
 
-        self.container.remove_headers(&response.removed_headers);
-        self.container.add_headers(&response.added_headers)?;
+        self.container.remove_request_headers(&response.removed_headers);
+        self.container.add_request_headers(&response.added_headers)?;
 
         match response.status_code {
             Some(val) => self.container.status_code_set(val as u16),
@@ -65,8 +65,8 @@ impl ContainerHandler {
     pub fn handle_middleware_response(&mut self, response: &ResponseResponse) -> Result<()> {
 
         // TODO: figure out how to return multiple set-cookie headers
-        self.container.remove_headers(&response.removed_headers.clone());
-        self.container.add_headers(&response.added_headers)?;
+        self.container.remove_response_headers(&response.removed_headers.clone());
+        self.container.add_response_headers(&response.added_headers)?;
 
         match response.status_code {
             Some(val) => self.container.status_code_set(val as u16),
@@ -136,11 +136,7 @@ impl ContainerHandler {
             .header(BACKEND_TIME_HEADER, HeaderValue::from_str(&self.backend_elapsed.unwrap().as_millis().to_string())?);
 
         let headers_dict = response.headers_mut().unwrap();
-
-        let headers = match self.container.state() {
-            ContainerState::MiddlewareRequest => self.container.request_headers().to_owned(),
-            _ => self.container.response_headers().to_owned()
-        };
+        let headers = self.container.response_headers().to_owned();
 
         for header in headers {
             headers_dict.insert(HeaderName::from_lowercase(header.name.to_lowercase().as_bytes())?, HeaderValue::from_str(header.value.as_str())?);
