@@ -96,21 +96,23 @@ impl RequestContainerBuilder {
 impl RequestContainer {
     pub fn state_set(&mut self, state: ContainerState) { self.state = state }
 
-    pub fn state(&mut self) -> &ContainerState { &self.state }
-
     pub fn response_headers_set(&mut self, headers: HeaderMap) { self.response.headers = headers }
 
     pub fn status_code_set(&mut self, status_code: u16) { self.status_code = Some(status_code) }
 
-    pub fn add_headers(&mut self, headers:&Vec<Header>) -> Result<()> {
-        let mut container = match self.state {
-            MiddlewareRequest => self.request.headers.to_owned(),
-            _ => self.response.headers.to_owned()
-        };
-
+    pub fn add_request_headers(&mut self, headers:&Vec<Header>) -> Result<()> {
         for header in headers {
-            container.insert(HeaderName::from_lowercase(header.name.to_lowercase().as_bytes())?,
-                       HeaderValue::from_str(&header.value)?);
+            self.request.headers.insert(HeaderName::from_lowercase(header.name.to_lowercase().as_bytes())?,
+                             HeaderValue::from_str(&header.value)?);
+        }
+
+        Ok(())
+    }
+
+    pub fn add_response_headers(&mut self, headers:&Vec<Header>) -> Result<()> {
+        for header in headers {
+            self.response.headers.insert(HeaderName::from_lowercase(header.name.to_lowercase().as_bytes())?,
+                             HeaderValue::from_str(&header.value)?);
         }
 
         Ok(())
@@ -130,14 +132,15 @@ impl RequestContainer {
         }
     }
 
-    pub fn remove_headers(&mut self, headers: &Vec<String>) {
-        let mut container = match self.state {
-            MiddlewareRequest => self.request.headers.to_owned(),
-            _ => self.response.headers.to_owned()
-        };
-
+    pub fn remove_response_headers(&mut self, headers: &Vec<String>) {
         for header in headers {
-            container.remove(header);
+            self.response.headers.remove(header);
+        }
+    }
+
+    pub fn remove_request_headers(&mut self, headers: &Vec<String>) {
+        for header in headers {
+            self.request.headers.remove(header);
         }
     }
 
