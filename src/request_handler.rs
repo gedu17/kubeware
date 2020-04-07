@@ -82,10 +82,10 @@ impl RequestHandler {
                                     let data = response.into_inner();
 
                                     match ResponseStatus::from_i32(data.status) {
-                                        Some(ResponseStatus::Success) => container.handle_middleware_request(&data)?,
+                                        Some(ResponseStatus::Success) => container.handle_middleware_request(&data, false)?,
                                         Some(ResponseStatus::Continue) => (),
                                         Some(ResponseStatus::Stop) => {
-                                            container.handle_middleware_request(&data)?;
+                                            container.handle_middleware_request(&data, true)?;
 
                                             return Ok(container.into_response()?)
                                         },
