@@ -1,0 +1,83 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: kubeware
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubeware
+      version: v0.1.7
+  template:
+    metadata:
+      labels:
+        app: kubeware
+        version: v0.1.7
+    spec:
+      volumes:
+        - name: kubeware
+          configMap:
+            name: kubeware
+            items:
+              - key: config.toml
+                path: config.toml
+      containers:
+        - name: httpbin
+          image: docker.io/kennethreitz/httpbin
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+        - name: authn
+          image: docker.io/gedu17/kubeware-examples:authn-1.0.1
+          ports:
+            - containerPort: 17002
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+        - name: kubeware
+          image: docker.io/gedu17/kubeware:0.1.7
+          ports:
+            - containerPort: 81
+              protocol: TCP
+          volumeMounts:
+            - name: kubeware
+              mountPath: /opt/kubeware
+          imagePullPolicy: IfNotPresent
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+
+---
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: kubeware
+data:
+  config.toml: |
+    ip = "0.0.0.0"
+    port = 81
+    [backend]
+    url = "http://127.0.0.1:80"
+    [[services]]
+    url = "http://127.0.0.1:17002"
+    request = true
+    response = false
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: kubeware
+  namespace: default
+  labels:
+    app: kubeware
+spec:
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8001
+      targetPort: 81
+  selector:
+    app: kubeware
+  type: NodePort
