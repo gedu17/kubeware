@@ -2,7 +2,15 @@
 
 This example sends mirrored request to mirror endpoint
 
-To run this example:
+## Running in minikube
+
+```kubectl apply -f kubernetes.yml```
+
+```minikube service kubeware```
+
+```secondservice``` container will receive all requests sent to ```httpbin``` container
+
+## Running locally
 
 ```npm install```
 

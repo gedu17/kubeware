@@ -1,4 +1,4 @@
-var PROTO_PATH = __dirname + '/../../proto/service.proto';
+var PROTO_PATH = __dirname + '/' + (process.env.PROTO_FILE === undefined ? '../../proto/service.proto' : process.env.PROTO_FILE);
 var grpc = require('grpc');
 var http = require('http');
 var protoLoader = require('@grpc/proto-loader');
