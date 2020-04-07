@@ -1,6 +1,6 @@
-var PROTO_PATH = __dirname + '/../../proto/service.proto';
 var grpc = require('grpc');
 var protoLoader = require('@grpc/proto-loader');
+var PROTO_PATH = __dirname + '/' + (process.env.PROTO_FILE === undefined ? '../../proto/service.proto' : process.env.PROTO_FILE);
 var packageDefinition = protoLoader.loadSync(
     PROTO_PATH,
     {keepCase: true,
@@ -27,11 +27,14 @@ function handleRequest(obj, callback) {
     if (authnHeader.length === 0) {
         callback(null, {
             status: 'STOP',
-            addedHeaders: [ ],
+            addedHeaders: [ 
+                {
+                    name: "WWW-Authenticate",
+                    value: "Basic realm=\"Kubeware\""
+                }
+             ],
             removedHeaders: [ ],
-            body: {
-                value: "No credentials"
-            },
+            body: null,
             statusCode: {
                 value: 401
             }
@@ -59,11 +62,14 @@ function handleRequest(obj, callback) {
     } else {
         callback(null, {
             status: 'STOP',
-            addedHeaders: [ ],
+            addedHeaders: [ 
+                {
+                    name: "WWW-Authenticate",
+                    value: "Basic realm=\"Kubeware\""
+                }
+            ],
             removedHeaders: [ ],
-            body: {
-                value: "Invalid credentials"
-            },
+            body: null,
             statusCode: {
                 value: 401
             }

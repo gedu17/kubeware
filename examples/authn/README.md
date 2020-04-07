@@ -2,7 +2,14 @@
 
 This example checks for authorization header, and verifies these credentials ```admin``` / ```password123```. Also it removes authorization header and replaces it with ```user: admin``` header.
 
-To run this example:
+
+## Running in minikube
+
+```kubectl apply -f kubernetes.yml```
+
+```minikube service kubeware```
+
+## Running locally
 
 ```npm install```
 
