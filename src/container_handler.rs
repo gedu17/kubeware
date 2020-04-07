@@ -44,10 +44,13 @@ impl ContainerHandler {
         })
     }
 
-    pub fn handle_middleware_request(&mut self, response: &RequestResponse) -> Result<()> {
-
+    pub fn handle_middleware_request(&mut self, response: &RequestResponse, stop: bool) -> Result<()> {
         self.container.remove_request_headers(&response.removed_headers);
-        self.container.add_request_headers(&response.added_headers)?;
+
+        match stop {
+            true => self.container.add_response_headers(&response.added_headers)?,
+            false => self.container.add_request_headers(&response.added_headers)?
+        };
 
         match response.status_code {
             Some(val) => self.container.status_code_set(val as u16),
