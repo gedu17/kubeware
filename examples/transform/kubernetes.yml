@@ -22,22 +22,16 @@ spec:
               - key: config.toml
                 path: config.toml
       containers:
-        - name: httpbin
-          image: docker.io/kennethreitz/httpbin
+        - name: transform-server
+          image: docker.io/gedu17/kubeware-examples:transform-server-1.0.0
           ports:
-            - containerPort: 80
+            - containerPort: 17001
               protocol: TCP
           imagePullPolicy: IfNotPresent
-        - name: mirror
-          image: docker.io/gedu17/kubeware-examples:mirror-1.0.0
+        - name: transform
+          image: docker.io/gedu17/kubeware-examples:transform-1.0.0
           ports:
             - containerPort: 17002
-              protocol: TCP
-          imagePullPolicy: IfNotPresent
-        - name: secondservice
-          image: docker.io/gedu17/kubeware-examples:mirror-service-1.0.0
-          ports:
-            - containerPort: 17003
               protocol: TCP
           imagePullPolicy: IfNotPresent
         - name: kubeware
@@ -63,7 +57,7 @@ data:
     ip = "0.0.0.0"
     port = 81
     [backend]
-    url = "http://127.0.0.1:80"
+    url = "http://127.0.0.1:17001"
     [[services]]
     url = "http://127.0.0.1:17002"
     request = true
