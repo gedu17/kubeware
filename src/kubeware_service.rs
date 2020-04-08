@@ -85,13 +85,3 @@ impl KubewareService {
 
     pub fn timeout(&self) -> Duration { self.timeout }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_failure() {
-        assert!(true);
-    }
-}

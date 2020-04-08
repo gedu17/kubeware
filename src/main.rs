@@ -5,6 +5,7 @@ mod tower_service;
 mod request_handler;
 mod kubeware_service;
 mod container_handler;
+mod integration_tests;
 
 extern crate pretty_env_logger;
 #[macro_use]
@@ -80,14 +81,14 @@ async fn main() -> Result<()> {
         _ => Client::new()
     };
 
-    let binded_server = Server::bind(&address).serve(Builder {
+    let bind_server = Server::bind(&address).serve(Builder {
         http_client,
         config,
         mutex: Mutex::new(false),
         services: Arc::new(services)
     });
 
-    let server = binded_server.with_graceful_shutdown(sigterm_signal());
+    let server = bind_server.with_graceful_shutdown(sigterm_signal());
 
     if let Err(err) = server.await {
         error!("Fatal error: {:?}", err);
