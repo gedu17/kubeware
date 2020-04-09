@@ -1,8 +1,10 @@
+
+
 #[cfg(test)]
 mod tests {
     use tonic::{Request as TonicRequest, Response as TonicResponse};
     use crate::kubeware::{RequestRequest, RequestResponse, ResponseRequest, ResponseResponse, ResponseStatus};
-    use crate::integration_tests::{setup_middleware, setup_kubeware, setup_backend, BackendFn};
+    use crate::integration_tests::{setup_middleware, setup_kubeware, setup_backend};
     use hyper::{Body, Client, Request, Response};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -25,14 +27,9 @@ mod tests {
     #[tokio::test(core_threads = 5)]
     async fn basic_test() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Arrange
-        let request_counter = Arc::new(AtomicUsize::new(0));
-        let response_counter = Arc::new(AtomicUsize::new(0));
-        let request_counter_closure = request_counter.clone();
-        let response_counter_closure = response_counter.clone();
-
-        let middleware_tx = setup_middleware(
+        let (middleware_tx, request_counter, response_counter) = setup_middleware(
             Box::new(move |_req: TonicRequest<RequestRequest>| {
-                request_counter_closure.store(1, Ordering::Relaxed);
+                // request_counter_closure.store(1, Ordering::Relaxed);
                 TonicResponse::new(RequestResponse {
                     status: ResponseStatus::Success as i32,
                     added_headers: Vec::default(),
@@ -42,7 +39,6 @@ mod tests {
                 })
             }),
             Box::new(move |_req: TonicRequest<ResponseRequest>| {
-                response_counter_closure.store(1, Ordering::Relaxed);
                 TonicResponse::new(ResponseResponse {
                     status: ResponseStatus::Success as i32,
                     added_headers: Vec::default(),
@@ -53,7 +49,7 @@ mod tests {
             })).await?;
         
         let kubeware_tx = setup_kubeware(CONFIG).await?;
-        let backend_tx = setup_backend(|_req| {
+        let (backend_tx, backend_counter) = setup_backend(|_req| {
             Response::new(Body::from(format!("OK")))
         }).await?;
 
@@ -66,8 +62,10 @@ mod tests {
         let res = Client::new().request(req).await?;
         let (parts, body) = res.into_parts();
 
+        // Assert
         assert_eq!(1, request_counter.load(Ordering::Relaxed));
         assert_eq!(1, response_counter.load(Ordering::Relaxed));
+        assert_eq!(1, backend_counter.load(Ordering::Relaxed));
         assert_eq!(200, parts.status.as_u16());
         assert_eq!("OK", hyper::body::to_bytes(body).await?);
         assert!(parts.headers.get(KUBEWARE_TIME_HEADER).is_some());
@@ -81,3 +79,4 @@ mod tests {
         Ok(())
     }
 }
+

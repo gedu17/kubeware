@@ -18,6 +18,7 @@ toml = "0.5.6"
 serde = "1.0.105"
 serde_derive = "1.0.105"
 futures = "0.3.4"
+async-trait = "0.1.30"
 
 [build-dependencies]
 tonic-build = "0.1.0"
