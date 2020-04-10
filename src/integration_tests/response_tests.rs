@@ -18,7 +18,7 @@ mod tests {
         url = "http://127.0.0.1:17001"
         version = "HTTP"
 
-        [[services]]
+        [[middleware]]
         url = "http://127.0.0.1:17002"
         request = false
         response = true

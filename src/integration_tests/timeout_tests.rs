@@ -19,7 +19,7 @@ mod tests {
         version = "HTTP"
         timeout_ms = 50
 
-        [[services]]
+        [[middleware]]
         url = "http://127.0.0.1:17002"
         request = true
         response = true

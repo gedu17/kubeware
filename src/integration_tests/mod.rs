@@ -3,7 +3,7 @@ use futures::channel::oneshot;
 use std::sync::{Arc, Mutex};
 use crate::tower_service::Builder;
 use crate::config::{HttpVersion, Config};
-use crate::services::Services;
+use crate::middlewares::Middlewares;
 use std::env::set_var;
 use crate::{RUST_LOG, LOOPBACK, PORT};
 
@@ -92,10 +92,10 @@ async fn setup_kubeware (config: &str) -> BootstrapResult<Sender<()>> {
 
     let _ = pretty_env_logger::try_init_timed();
 
-    let mut services = Services::with_config(&config);
+    let mut middlewares = Middlewares::with_config(&config);
 
-    for service in &config.services {
-        services.insert(service).await?;
+    for middleware in &config.middlewares {
+        middlewares.insert(middleware).await?;
     }
 
     let http_client = match &config.backend.version {
@@ -112,7 +112,7 @@ async fn setup_kubeware (config: &str) -> BootstrapResult<Sender<()>> {
         http_client,
         config,
         mutex: Mutex::new(false),
-        services: Arc::new(services)
+        middlewares: Arc::new(middlewares)
     }).with_graceful_shutdown(async move {
         rx.await.ok();
     });

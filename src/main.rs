@@ -1,9 +1,9 @@
 mod request_container;
-mod services;
+mod middlewares;
 mod config;
 mod tower_service;
 mod request_handler;
-mod kubeware_service;
+mod middleware;
 mod container_handler;
 mod integration_tests;
 
@@ -21,7 +21,7 @@ use std::net::ToSocketAddrs;
 use std::sync::{Arc};
 use std::sync::Mutex;
 
-use services::{Services};
+use middlewares::{Middlewares};
 use crate::tower_service::Builder;
 
 type GenericError = Box<dyn std::error::Error + Send + Sync>;
@@ -67,10 +67,10 @@ async fn main() -> Result<()> {
     };
 
     pretty_env_logger::try_init_timed()?;
-    let mut services = Services::with_config(&config);
+    let mut middlewares = Middlewares::with_config(&config);
 
-    for service in &config.services {
-        services.insert(service).await?;
+    for middleware in &config.middlewares {
+        middlewares.insert(middleware).await?;
     }
 
     let http_client = match &config.backend.version {
@@ -85,7 +85,7 @@ async fn main() -> Result<()> {
         http_client,
         config,
         mutex: Mutex::new(false),
-        services: Arc::new(services)
+        middlewares: Arc::new(middlewares)
     });
 
     let server = bind_server.with_graceful_shutdown(sigterm_signal());
