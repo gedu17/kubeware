@@ -5,7 +5,7 @@ mod tests {
     use crate::integration_tests::{setup_middleware, setup_kubeware, setup_backend, BackendResponse, setup_backend2};
     use hyper::{Body, Client, Request, Response, HeaderMap};
     use std::sync::{Arc, Mutex};
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{Ordering};
     use async_trait::async_trait;
 
     type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -23,7 +23,7 @@ mod tests {
         [[services]]
         url = "http://127.0.0.1:17002"
         request = true
-        response = true
+        response = false
     "#;
 
     #[tokio::test(core_threads = 5)]
@@ -65,7 +65,7 @@ mod tests {
 
         // Assert
         assert_eq!(1, request_counter.load(Ordering::Relaxed));
-        assert_eq!(1, response_counter.load(Ordering::Relaxed));
+        assert_eq!(0, response_counter.load(Ordering::Relaxed));
         assert_eq!(1, backend_counter.load(Ordering::Relaxed));
         assert_eq!(200, parts.status.as_u16());
         assert_eq!("OK", hyper::body::to_bytes(body).await?);
@@ -82,12 +82,12 @@ mod tests {
     async fn when_sending_request_on_continue_and_body_change_body_is_not_changed() -> Result<()> {
         // Arrange
         #[derive(Clone)]
-        pub struct backend {
+        pub struct Backend {
             pub body: Arc<Mutex<String>>
         }
 
         #[async_trait]
-        impl BackendResponse for backend {
+        impl BackendResponse for Backend {
             async fn handle(&mut self, request: Request<Body>) -> Response<Body> {
                 let (_parts, body) = request.into_parts();
                 let full_body = hyper::body::to_bytes(body).await.unwrap();
@@ -121,7 +121,7 @@ mod tests {
             })).await?;
 
         let kubeware_tx = setup_kubeware(CONFIG).await?;
-        let backend = backend { body: Arc::new(Mutex::new(String::default())) };
+        let backend = Backend { body: Arc::new(Mutex::new(String::default())) };
         let backend_body = Arc::clone(&backend.body);
         let (backend_tx, backend_counter) = setup_backend2(backend).await?;
 
@@ -132,11 +132,12 @@ mod tests {
             .body(Body::from(original_body))
             .unwrap();
 
-        let res = Client::new().request(req).await?;
-        let (parts, body) = res.into_parts();
+        let _ = Client::new().request(req).await?;
 
         // Assert
         assert_eq!(original_body, *backend_body.lock().unwrap());
+        assert_eq!(1, request_counter.load(Ordering::Relaxed));
+        assert_eq!(0, response_counter.load(Ordering::Relaxed));
         assert_eq!(1, backend_counter.load(Ordering::Relaxed));
 
         // Cleanup
@@ -151,12 +152,12 @@ mod tests {
     async fn when_sending_request_on_continue_and_headers_added_headers_are_not_added() -> Result<()> {
         // Arrange
         #[derive(Clone)]
-        pub struct backend {
+        pub struct Backend {
             pub headers: Arc<Mutex<HeaderMap>>
         }
 
         #[async_trait]
-        impl BackendResponse for backend {
+        impl BackendResponse for Backend {
             async fn handle(&mut self, request: Request<Body>) -> Response<Body> {
                 let (parts, _body) = request.into_parts();
                 self.headers.lock().unwrap().extend(parts.headers);
@@ -195,7 +196,7 @@ mod tests {
             })).await?;
 
         let kubeware_tx = setup_kubeware(CONFIG).await?;
-        let backend = backend { headers: Arc::new(Mutex::new(HeaderMap::new())) };
+        let backend = Backend { headers: Arc::new(Mutex::new(HeaderMap::new())) };
         let backend_headers = Arc::clone(&backend.headers);
         let (backend_tx, backend_counter) = setup_backend2(backend).await?;
 
@@ -206,13 +207,14 @@ mod tests {
             .body(Body::from("test body"))
             .unwrap();
 
-        let res = Client::new().request(req).await?;
-        let (parts, body) = res.into_parts();
+        let _ = Client::new().request(req).await?;
         let headers = backend_headers.lock().unwrap();
 
         // Assert
         assert!(!headers.contains_key(HEADER_NAME));
         assert!(!headers.contains_key(HEADER2_NAME));
+        assert_eq!(1, request_counter.load(Ordering::Relaxed));
+        assert_eq!(0, response_counter.load(Ordering::Relaxed));
         assert_eq!(1, backend_counter.load(Ordering::Relaxed));
 
         // Cleanup
@@ -227,12 +229,12 @@ mod tests {
     async fn when_sending_request_on_continue_and_headers_removed_headers_are_not_removed() -> Result<()> {
         // Arrange
         #[derive(Clone)]
-        pub struct backend {
+        pub struct Backend {
             pub headers: Arc<Mutex<HeaderMap>>
         }
 
         #[async_trait]
-        impl BackendResponse for backend {
+        impl BackendResponse for Backend {
             async fn handle(&mut self, request: Request<Body>) -> Response<Body> {
                 let (parts, _body) = request.into_parts();
                 self.headers.lock().unwrap().extend(parts.headers);
@@ -262,7 +264,7 @@ mod tests {
             })).await?;
 
         let kubeware_tx = setup_kubeware(CONFIG).await?;
-        let backend = backend { headers: Arc::new(Mutex::new(HeaderMap::new())) };
+        let backend = Backend { headers: Arc::new(Mutex::new(HeaderMap::new())) };
         let backend_headers = Arc::clone(&backend.headers);
         let (backend_tx, backend_counter) = setup_backend2(backend).await?;
 
@@ -275,13 +277,14 @@ mod tests {
             .body(Body::from("test body"))
             .unwrap();
 
-        let res = Client::new().request(req).await?;
-        let (parts, body) = res.into_parts();
+        let _ = Client::new().request(req).await?;
         let headers = backend_headers.lock().unwrap();
 
         // Assert
         assert!(headers.contains_key(HEADER_NAME));
         assert!(headers.contains_key(HEADER2_NAME));
+        assert_eq!(1, request_counter.load(Ordering::Relaxed));
+        assert_eq!(0, response_counter.load(Ordering::Relaxed));
         assert_eq!(1, backend_counter.load(Ordering::Relaxed));
 
         // Cleanup
@@ -331,7 +334,7 @@ mod tests {
 
         // Assert
         assert_eq!(1, request_counter.load(Ordering::Relaxed));
-        assert_eq!(1, response_counter.load(Ordering::Relaxed));
+        assert_eq!(0, response_counter.load(Ordering::Relaxed));
         assert_eq!(1, backend_counter.load(Ordering::Relaxed));
         assert_eq!(200, parts.status.as_u16());
         assert_eq!("OK", hyper::body::to_bytes(body).await?);
@@ -491,8 +494,6 @@ mod tests {
         // Act
         let req = Request::builder()
             .uri("http://127.0.0.1:17000/")
-            .header(HEADER_NAME, "1")
-            .header(HEADER2_NAME, "1")
             .body(Body::empty())
             .unwrap();
 
@@ -520,12 +521,12 @@ mod tests {
     async fn when_sending_request_on_success_and_body_change_body_is_changed() -> Result<()> {
         // Arrange
         #[derive(Clone)]
-        pub struct backend {
+        pub struct Backend {
             pub body: Arc<Mutex<String>>
         }
 
         #[async_trait]
-        impl BackendResponse for backend {
+        impl BackendResponse for Backend {
             async fn handle(&mut self, request: Request<Body>) -> Response<Body> {
                 let (_parts, body) = request.into_parts();
                 let full_body = hyper::body::to_bytes(body).await.unwrap();
@@ -558,7 +559,7 @@ mod tests {
             })).await?;
 
         let kubeware_tx = setup_kubeware(CONFIG).await?;
-        let backend = backend { body: Arc::new(Mutex::new(String::default())) };
+        let backend = Backend { body: Arc::new(Mutex::new(String::default())) };
         let backend_body = Arc::clone(&backend.body);
         let (backend_tx, backend_counter) = setup_backend2(backend).await?;
 
@@ -569,11 +570,12 @@ mod tests {
             .body(Body::from("test body"))
             .unwrap();
 
-        let res = Client::new().request(req).await?;
-        let (parts, body) = res.into_parts();
+        let _ = Client::new().request(req).await?;
 
         // Assert
         assert_eq!(changed_body, *backend_body.lock().unwrap());
+        assert_eq!(1, request_counter.load(Ordering::Relaxed));
+        assert_eq!(0, response_counter.load(Ordering::Relaxed));
         assert_eq!(1, backend_counter.load(Ordering::Relaxed));
 
         // Cleanup
@@ -588,12 +590,12 @@ mod tests {
     async fn when_sending_request_on_success_and_headers_added_headers_are_added() -> Result<()> {
         // Arrange
         #[derive(Clone)]
-        pub struct backend {
+        pub struct Backend {
             pub headers: Arc<Mutex<HeaderMap>>
         }
 
         #[async_trait]
-        impl BackendResponse for backend {
+        impl BackendResponse for Backend {
             async fn handle(&mut self, request: Request<Body>) -> Response<Body> {
                 let (parts, _body) = request.into_parts();
                 self.headers.lock().unwrap().extend(parts.headers);
@@ -632,7 +634,7 @@ mod tests {
             })).await?;
 
         let kubeware_tx = setup_kubeware(CONFIG).await?;
-        let backend = backend { headers: Arc::new(Mutex::new(HeaderMap::new())) };
+        let backend = Backend { headers: Arc::new(Mutex::new(HeaderMap::new())) };
         let backend_headers = Arc::clone(&backend.headers);
         let (backend_tx, backend_counter) = setup_backend2(backend).await?;
 
@@ -643,13 +645,14 @@ mod tests {
             .body(Body::from("test body"))
             .unwrap();
 
-        let res = Client::new().request(req).await?;
-        let (parts, body) = res.into_parts();
+        let _ = Client::new().request(req).await?;
         let headers = backend_headers.lock().unwrap();
 
         // Assert
         assert!(headers.contains_key(HEADER_NAME));
         assert!(headers.contains_key(HEADER2_NAME));
+        assert_eq!(1, request_counter.load(Ordering::Relaxed));
+        assert_eq!(0, response_counter.load(Ordering::Relaxed));
         assert_eq!(1, backend_counter.load(Ordering::Relaxed));
 
         // Cleanup
@@ -664,12 +667,12 @@ mod tests {
     async fn when_sending_request_on_success_and_headers_removed_headers_are_removed() -> Result<()> {
         // Arrange
         #[derive(Clone)]
-        pub struct backend {
+        pub struct Backend {
             pub headers: Arc<Mutex<HeaderMap>>
         }
 
         #[async_trait]
-        impl BackendResponse for backend {
+        impl BackendResponse for Backend {
             async fn handle(&mut self, request: Request<Body>) -> Response<Body> {
                 let (parts, _body) = request.into_parts();
                 self.headers.lock().unwrap().extend(parts.headers);
@@ -699,7 +702,7 @@ mod tests {
             })).await?;
 
         let kubeware_tx = setup_kubeware(CONFIG).await?;
-        let backend = backend { headers: Arc::new(Mutex::new(HeaderMap::new())) };
+        let backend = Backend { headers: Arc::new(Mutex::new(HeaderMap::new())) };
         let backend_headers = Arc::clone(&backend.headers);
         let (backend_tx, backend_counter) = setup_backend2(backend).await?;
 
@@ -712,13 +715,14 @@ mod tests {
             .body(Body::from("test body"))
             .unwrap();
 
-        let res = Client::new().request(req).await?;
-        let (parts, body) = res.into_parts();
+        let _ = Client::new().request(req).await?;
         let headers = backend_headers.lock().unwrap();
 
         // Assert
         assert!(!headers.contains_key(HEADER_NAME));
         assert!(!headers.contains_key(HEADER2_NAME));
+        assert_eq!(1, request_counter.load(Ordering::Relaxed));
+        assert_eq!(0, response_counter.load(Ordering::Relaxed));
         assert_eq!(1, backend_counter.load(Ordering::Relaxed));
 
         // Cleanup
