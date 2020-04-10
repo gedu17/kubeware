@@ -65,7 +65,7 @@ impl ContainerHandler {
         Ok(())
     }
 
-    pub fn handle_middleware_response(&mut self, response: &ResponseResponse) -> Result<()> {
+    pub fn handle_middleware_response(&mut self, response: &ResponseResponse, stop: bool) -> Result<()> {
 
         // TODO: figure out how to return multiple set-cookie headers
         self.container.remove_response_headers(&response.removed_headers.clone());
@@ -73,12 +73,12 @@ impl ContainerHandler {
 
         match response.status_code {
             Some(val) => self.container.status_code_set(val as u16),
-            None => ()
+            None => if stop { self.container.status_code_set(500) } else { self.container.status_code_set(self.container.status_code().unwrap_or(500)) }
         };
 
         match &response.body {
             Some(val) => self.container.body_set_string(val.clone()),
-            None => ()
+            None => if stop { self.container.body_set_string(String::new()) } else { self.container.body_set_string(self.container.body()?) }
         };
 
         Ok(())

@@ -107,7 +107,8 @@ impl RequestHandler {
                     }
                 },
                 None => {
-                    warn!("[Middleware Request] Endpoint is not resolved and will be ignored. {}", client.url());
+                    error!("[Middleware Request] Endpoint is not resolved. {}", client.url());
+                    return Ok(RequestHandler::service_unavailable_error(container.timer())?)
                 }
             };
 
@@ -159,10 +160,10 @@ impl RequestHandler {
                                     let data = response.into_inner();
 
                                     match ResponseStatus::from_i32(data.status) {
-                                        Some(ResponseStatus::Success) => container.handle_middleware_response(&data)?,
+                                        Some(ResponseStatus::Success) => container.handle_middleware_response(&data, false)?,
                                         Some(ResponseStatus::Continue) => (),
                                         Some(ResponseStatus::Stop) => {
-                                            container.handle_middleware_response(&data)?;
+                                            container.handle_middleware_response(&data, true)?;
 
                                             return Ok(container.into_response()?)
                                         },
@@ -184,7 +185,8 @@ impl RequestHandler {
                     }
                 },
                 None => {
-                    warn!("[Middleware Response] Endpoint is not resolved and will be ignored. {}", client.url());
+                    error!("[Middleware Response] Endpoint is not resolved. {}", client.url());
+                    return Ok(RequestHandler::service_unavailable_error(container.timer())?)
                 }
             };
 
