@@ -7,12 +7,12 @@ spec:
   selector:
     matchLabels:
       app: kubeware
-      version: v0.1.7
+      version: v0.1.8
   template:
     metadata:
       labels:
         app: kubeware
-        version: v0.1.7
+        version: v0.1.8
     spec:
       volumes:
         - name: kubeware
@@ -35,7 +35,7 @@ spec:
               protocol: TCP
           imagePullPolicy: IfNotPresent
         - name: kubeware
-          image: docker.io/gedu17/kubeware:0.1.7
+          image: docker.io/gedu17/kubeware:0.1.8
           ports:
             - containerPort: 81
               protocol: TCP
@@ -58,7 +58,7 @@ data:
     port = 81
     [backend]
     url = "http://127.0.0.1:17001"
-    [[services]]
+    [[middleware]]
     url = "http://127.0.0.1:17002"
     request = true
     response = false

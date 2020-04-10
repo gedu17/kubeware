@@ -1,5 +1,5 @@
 use std::sync::{Arc};
-use crate::services::Services;
+use crate::middlewares::Middlewares;
 use hyper::{Client, Request, Body, Response};
 use hyper::client::HttpConnector;
 use crate::config::{Config};
@@ -21,7 +21,7 @@ const GRPC_TIMEOUT_HEADER: &str = "grpc-timeout";
 
 pub struct RequestHandler
 {
-    pub services: Arc<Services>,
+    pub middlewares: Arc<Middlewares>,
     pub http_client: Client<HttpConnector>,
     pub config: Config
 }
@@ -59,13 +59,13 @@ impl RequestHandler {
         Ok(response.status(504).body(body).unwrap())
     }
 
-    async fn handle(req: Request<Body>, services: Arc<Services>, config: Config, http_client: Client<HttpConnector>) -> Result<Response<Body>, GenericError> {
+    async fn handle(req: Request<Body>, middlewares: Arc<Middlewares>, config: Config, http_client: Client<HttpConnector>) -> Result<Response<Body>, GenericError> {
         let url = [config.backend.url.as_str(), req.uri().path()].join("");
         let mut container = ContainerHandler::new(req, url).await?;
-        let services = services.to_owned();
+        let middlewares = middlewares.to_owned();
         let backend_timeout = Duration::from_millis(config.backend.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MILLIS) as u64);
 
-        for client in services.request() {
+        for client in middlewares.request() {
             let timer = Instant::now();
 
             match client.connection().clone() {
@@ -143,7 +143,7 @@ impl RequestHandler {
         info!("[Backend Request] took {} ms.", container.backend_elapsed().unwrap_or(Duration::from_millis(0)).as_millis());
         container.state_set(MiddlewareResponse);
 
-        for client in services.response() {
+        for client in middlewares.response() {
             let timer = Instant::now();
 
             match client.connection().clone() {
@@ -207,12 +207,12 @@ impl Service<Request<Body>> for RequestHandler {
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        let services = Arc::clone(&self.services);
+        let middlewares = Arc::clone(&self.middlewares);
         let config = self.config.clone();
         let http_client = self.http_client.clone();
 
         let executor = async move {
-            match RequestHandler::handle(req, services, config, http_client).await {
+            match RequestHandler::handle(req, middlewares, config, http_client).await {
                 Ok(val) => Ok(val),
                 Err(err) => {
                     error!("Failed to parse request: {:?}", err);

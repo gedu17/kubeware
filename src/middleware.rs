@@ -4,7 +4,7 @@ use std::time::Duration;
 use crate::DEFAULT_TIMEOUT_MILLIS;
 
 #[derive(Clone)]
-pub struct KubewareService {
+pub struct Middleware {
     url: String,
     connection: Option<MiddlewareClient<Channel>>,
     timeout: Duration,
@@ -12,7 +12,7 @@ pub struct KubewareService {
     response: bool
 }
 
-pub struct KubewareServiceBuilder {
+pub struct MiddlewareBuilder {
     url: Option<String>,
     connection: Option<MiddlewareClient<Channel>>,
     request: Option<bool>,
@@ -20,9 +20,9 @@ pub struct KubewareServiceBuilder {
     timeout_millis: Option<u32>
 }
 
-impl KubewareServiceBuilder {
-    pub fn new() -> KubewareServiceBuilder {
-        KubewareServiceBuilder {
+impl MiddlewareBuilder {
+    pub fn new() -> MiddlewareBuilder {
+        MiddlewareBuilder {
             url: None,
             connection: None,
             request: None,
@@ -31,27 +31,27 @@ impl KubewareServiceBuilder {
         }
     }
 
-    pub fn url(mut self, url: String) -> KubewareServiceBuilder {
+    pub fn url(mut self, url: String) -> MiddlewareBuilder {
         self.url = Some(url);
         self
     }
 
-    pub fn request(mut self, enabled: bool) -> KubewareServiceBuilder {
+    pub fn request(mut self, enabled: bool) -> MiddlewareBuilder {
         self.request = Some(enabled);
         self
     }
 
-    pub fn response(mut self, enabled: bool) -> KubewareServiceBuilder {
+    pub fn response(mut self, enabled: bool) -> MiddlewareBuilder {
         self.response = Some(enabled);
         self
     }
 
-    pub fn connection(mut self, connection: Option<MiddlewareClient<Channel>>) -> KubewareServiceBuilder {
+    pub fn connection(mut self, connection: Option<MiddlewareClient<Channel>>) -> MiddlewareBuilder {
         self.connection = connection;
         self
     }
 
-    pub fn timeout_millis(mut self, ms: Option<u32>) -> KubewareServiceBuilder {
+    pub fn timeout_millis(mut self, ms: Option<u32>) -> MiddlewareBuilder {
         match ms {
             Some(val) => self.timeout_millis = Some(val),
             _ => self.timeout_millis = Some(DEFAULT_TIMEOUT_MILLIS)
@@ -60,8 +60,8 @@ impl KubewareServiceBuilder {
         self
     }
 
-    pub fn build(&self) -> KubewareService {
-        KubewareService {
+    pub fn build(&self) -> Middleware {
+        Middleware {
             url: self.url.as_ref().unwrap().to_string(),
             connection: self.connection.to_owned(),
             request: self.request.unwrap_or(false),
@@ -72,7 +72,7 @@ impl KubewareServiceBuilder {
 }
 
 
-impl KubewareService {
+impl Middleware {
     pub fn url(&self) -> &String { &self.url }
 
     #[allow(dead_code)]
