@@ -68,7 +68,7 @@ impl Middlewares {
                 .timeout_millis(middleware.timeout_ms)
                 .build(),
             Err(err) => {
-                warn!("Error connecting to service [{}]: {}", middleware.url, err);
+                warn!("Error connecting to middleware [{}]: {}", middleware.url, err);
 
                 MiddlewareBuilder::new()
                     .url(middleware.url.clone())

@@ -48,6 +48,15 @@ Currently only one set-cookie header will be sent. Investigation in #11
 
 [Data transformation example](examples/transform/README.md)
 
+## Running locally
+
+```cargo build```
+
+```cargo run```
+
+## Testing locally
+
+```cargo test -- --test-threads 1```
 
 ## Configuration
 
@@ -108,14 +117,20 @@ response = true
 
 `response` - Whether to send the `handle_response` RPC to the middleware or not. *Mandatory*
 
+### Environment variables
+
+`CONFIG_FILE` - specify the location of the config file in the filesystem
+
+`RUST_LOG` - specify log level
+
 
 ## Proto
 
 ### ResponseStatus
 
-- SUCCESS - processing succeded, headers, body and status code (if applicable) are updated
-- CONTINUE - processing pipeline proceeds, no data is updated
-- STOP - processing failed, returns response to the requester with specified headers, body and status code
+- `SUCCESS` - processing succeded, headers, body and status code (if applicable) are updated
+- `CONTINUE` - processing pipeline proceeds, no data is updated
+- `STOP` - processing failed, returns response to the requester with specified headers, body and status code
 
 ### Wrapper data types
 
@@ -125,7 +140,10 @@ For example if `HandleRequest` returns non-null body, then it will be updated, o
 
 ## Status codes
 
-500 - Generic error - something went wrong inside kubeware
-502 - Connectivity issue to the backend
-503 - Connectivity issue to the middleware or middleware timed out
-504 - Backend timed out
+`500` - Generic error - something went wrong inside kubeware
+
+`502` - Connectivity issue to the backend
+
+`503` - Connectivity issue to the middleware or middleware timed out
+
+`504` - Backend timed out
