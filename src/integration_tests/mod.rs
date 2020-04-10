@@ -27,6 +27,8 @@ type ResponseFn = Box<dyn Fn(TonicRequest<ResponseRequest>) -> TonicResponse<Res
 // Tests
 mod basic_tests;
 mod request_tests;
+mod response_tests;
+mod timeout_tests;
 
 pub struct MiddlewareService
 {
@@ -71,6 +73,7 @@ impl Middleware for MiddlewareService {
         &self,
         request: TonicRequest<ResponseRequest>,
     ) -> Result<TonicResponse<ResponseResponse>, Status> {
+
         let _ = self.response_counter.fetch_add(1, Ordering::Relaxed);
         Ok((self.response_fn)(request))
     }
@@ -160,6 +163,7 @@ async fn setup_backend<F> (closure: F) -> BootstrapResult<(Sender<()>, Arc<Atomi
     Ok((backend_tx, cloned_counter))
 }
 
+#[allow(dead_code)]
 async fn setup_backend2<F> (obj: F) -> BootstrapResult<(Sender<()>, Arc<AtomicUsize>)>
     where F: BackendResponse + Send + 'static + Clone + Sync {
 
