@@ -6,6 +6,8 @@ Useful when some functionality needs to be implemented outside of application or
 
 ## How it works
 
+RPC calls are done through GRPC
+
 All middlewares, which are enabled for request stage are executed.  
 Request headers can be added or removed, body altered.  
 After that request is sent to the backend.  
